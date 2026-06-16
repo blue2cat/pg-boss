@@ -5,13 +5,13 @@
 Creates a queue.
 
 ```ts
-  type Queue = {
-    name: string;
-    policy?: QueuePolicy;
-    partition?: boolean;
-    deadLetter?: string;
-    warningQueueSize?: number;
-  } & QueueOptions
+type Queue = {
+  name: string;
+  policy?: QueuePolicy;
+  partition?: boolean;
+  deadLetter?: string;
+  warningQueueSize?: number;
+} & QueueOptions
 ```
 
 Allowed policy values:
@@ -25,8 +25,10 @@ Allowed policy values:
 | `exclusive` | Only allows 1 job to be queued or active. Can be extended with `singletonKey` |
 | `key_strict_fifo` | Strict FIFO ordering per `singletonKey`. Requires `singletonKey` on every job. Blocks processing of jobs with the same key while any job with that key is active, in retry, or failed. |
 
+> [!WARNING]
 > `stately` queues are special in how retries are handled. By definition, stately queues will not allow multiple jobs to occupy `retry` state. Once a job exists in `retry`, failing another `active` job will bypass the retry mechanism and force the job to `failed`. If this job requires retries, consider a custom retry implementation using a dead letter queue.
 
+> [!NOTE]
 > `key_strict_fifo` queues enforce strict FIFO (First-In-First-Out) ordering per `singletonKey`. This is useful when you need to ensure jobs for the same entity (e.g., the same order, customer, or resource) are processed sequentially in the order they were created. The queue will block processing of subsequent jobs with the same `singletonKey` while any job with that key is:
 > - **active**: currently being processed
 > - **retry**: waiting to be retried after a failure
@@ -58,7 +60,7 @@ Allowed policy values:
 
 * **retryBackoff**, bool
 
-  Default: false. Enables exponential backoff retries based on retryDelay instead of a fixed delay. Sets initial retryDelay to 1 if not set. A simplified function to get the delay between runs is: `retryDelay * 2 ^ retryCount` with some jitter. The full function to determine the backoff delay is `Math.min(retryDelayMax, retryDelay * (2 ** Math.Min(16, retryCount) / 2 + 2 ** Math.Min(16, retryCount) / 2 * Math.random()))`
+  Default: false. Enables exponential backoff retries based on retryDelay instead of a fixed delay. Sets initial retryDelay to 1 if not set. A simplified function to get the delay between runs is: `retryDelay * 2 ^ retryCount` with some jitter. The full function to determine the backoff delay is `Math.min(retryDelayMax, retryDelay * (2 ** Math.min(16, retryCount) / 2 + 2 ** Math.min(16, retryCount) / 2 * Math.random()))`
 
 * **retryDelayMax**, int
 
@@ -109,7 +111,7 @@ Actual detection time is `heartbeatSeconds` + up to `monitorIntervalSeconds` (de
 
 * **expireInSeconds**, number
 
-  Default: 15 minutes.  How many seconds a job may be in active state before being retried or failed. Must be >=1
+  Default: 15 minutes.  How many seconds a job may be in active state before being retried or failed. Must be >=1. Maximum: 24 hours (86400).
 
 **Retention options**
 
@@ -121,19 +123,23 @@ Actual detection time is `heartbeatSeconds` + up to `monitorIntervalSeconds` (de
 
   Default: 7 days. How long a job should be retained in the database after it's completed. Set to 0 to never delete completed jobs.
 
-* All retry, expiration, and retention options set on the queue will be inheritied for each job, unless they are overridden.
+> [!NOTE]
+> All retry, expiration, and retention options set on the queue will be inherited for each job, unless they are overridden.
 
 ### `updateQueue(name, options)`
 
-Updates options on an existing queue, with the exception of the `policy` and `partition` settings, which cannot be changed.
+Updates options on an existing queue.
+
+> [!WARNING]
+> The `policy` and `partition` settings cannot be changed after a queue is created.
 
 ### `deleteQueue(name)`
 
 Deletes a queue and all jobs.
 
-### `getQueues()`
+### `getQueues(names?)`
 
-Returns all queues
+Returns all queues, or a filtered subset if an array of queue names is provided.
 
 ### `getQueue(name)`
 
