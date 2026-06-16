@@ -367,7 +367,7 @@ function validateExpirationConfig (config: any) {
   assert(!('expireInSeconds' in config) || config.expireInSeconds >= 1,
     'configuration assert: expireInSeconds must be at least every second')
 
-  assert(!config.expireInSeconds || config.expireInSeconds / 60 / 60 < POLICY.MAX_EXPIRATION_HOURS, `configuration assert: expiration cannot exceed ${POLICY.MAX_EXPIRATION_HOURS} hours`)
+  assert(!config.expireInSeconds || config.expireInSeconds / 60 / 60 <= POLICY.MAX_EXPIRATION_HOURS, `configuration assert: expiration cannot exceed ${POLICY.MAX_EXPIRATION_HOURS} hours`)
 }
 
 function validateRetryConfig (config: any) {

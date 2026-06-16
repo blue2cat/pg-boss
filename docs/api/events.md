@@ -72,7 +72,7 @@ Emitted at most once every 2 seconds whenever at least one worker has an active 
     lastFetchedOn: 1620149137015,
     lastJobStartedOn: 1620149137015,
     lastJobEndedOn: null,
-    lastJobDuration: 343
+    lastJobDuration: 343,
     lastError: null,
     lastErrorOn: null
   }
@@ -112,7 +112,7 @@ The event payload contains:
 {
   id: '550e8400-e29b-41d4-a716-446655440000',
   name: 'create-index',
-  status: 'completed',  // 'in_progress', 'completed', or 'failed'
+  status: 'completed',  // 'pending', 'in_progress', 'completed', or 'failed'
   queue: 'my-queue',    // queue name if applicable
   table: 'j1a2b3c4...', // target table name
   error: undefined      // error message if status is 'failed'
