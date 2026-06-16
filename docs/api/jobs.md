@@ -37,7 +37,7 @@ Creates a new job and returns the job id.
 
 * **retryBackoff**, bool
 
-  Default: false. Enables exponential backoff retries based on retryDelay instead of a fixed delay. Sets initial retryDelay to 1 if not set. A simplified function to get the delay between runs is: `retryDelay * 2 ^ retryCount` with some jitter. The full function to determine the backoff delay is `Math.min(retryDelayMax, retryDelay * (2 ** Math.Min(16, retryCount) / 2 + 2 ** Math.Min(16, retryCount) / 2 * Math.random()))`
+  Default: false. Enables exponential backoff retries based on retryDelay instead of a fixed delay. Sets initial retryDelay to 1 if not set. A simplified function to get the delay between runs is: `retryDelay * 2 ^ retryCount` with some jitter. The full function to determine the backoff delay is `Math.min(retryDelayMax, retryDelay * (2 ** Math.min(16, retryCount) / 2 + 2 ** Math.min(16, retryCount) / 2 * Math.random()))`
 
 * **retryDelayMax**, int
 
@@ -53,7 +53,7 @@ Creates a new job and returns the job id.
 
 * **expireInSeconds**, number
 
-  Default: 15 minutes.  How many seconds a job may be in active state before being retried or failed. Must be >=1
+  Default: 15 minutes.  How many seconds a job may be in active state before being retried or failed. Must be >=1. Maximum: 24 hours (86400).
 
 **Retention options**
 
@@ -185,19 +185,22 @@ The following contract is a typescript defintion of the expected object. This wi
 
 ```ts
 interface JobInsert<T = object> {
-  id?: string,
+  id?: string;
   data?: T;
   priority?: number;
   retryLimit?: number;
   retryDelay?: number;
   retryBackoff?: boolean;
-  startAfter?: Date | string;
+  retryDelayMax?: number;
+  startAfter?: number | string | Date;
   singletonKey?: string;
+  singletonSeconds?: number;
   expireInSeconds?: number;
-  heartbeatSeconds?: number;
   deleteAfterSeconds?: number;
-  keepUntil?: Date | string;
-  group?: { id: string; tier?: string };
+  retentionSeconds?: number;
+  heartbeatSeconds?: number;
+  group?: GroupOptions;
+  deadLetter?: string;
 }
 ```
 
@@ -285,6 +288,14 @@ Returns an array of jobs from a queue
 
     If set, only fetch jobs with a priority less than or equal to this value. If used together with `minPriority`, `minPriority` must be less than or equal to `maxPriority`.
 
+  * `groupConcurrency`, int | object
+
+    Limit concurrent jobs per group during a fetch. Same format as `groupConcurrency` in `work()`. Does not coordinate across nodes.
+
+  * `ignoreGroups`, string[] | null
+
+    Skip jobs belonging to any of the specified group ids during fetch.
+
     ```js
     interface JobWithMetadata<T = object> {
       id: string;
@@ -296,12 +307,13 @@ Returns an array of jobs from a queue
       retryCount: number;
       retryDelay: number;
       retryBackoff: boolean;
+      retryDelayMax?: number;
       startAfter: Date;
       startedOn: Date;
       singletonKey: string | null;
       singletonOn: Date | null;
-      groupId: string | null;
-      groupTier: string | null;
+      groupId?: string | null;
+      groupTier?: string | null;
       expireInSeconds: number;
       heartbeatSeconds: number | null;
       heartbeatOn: Date | null;
@@ -311,6 +323,7 @@ Returns an array of jobs from a queue
       keepUntil: Date;
       blocked: boolean,
       blocking: boolean,
+      pendingDependencies: number,
       deadLetter: string,
       policy: string,
       output: object
