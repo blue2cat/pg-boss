@@ -1,0 +1,116 @@
+on:
+  # Opt-in per PR: add the "benchmark" label (or re-run by pushing to a labeled PR). Benchmarks are
+  # slower and noisier than tests, so they do not run on every PR automatically.
+  pull_request:
+    types: [labeled, synchronize, reopened, opened]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to benchmark and comment on
+        required: true
+
+name: Benchmark
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: benchmark-${{ github.event.pull_request.number || github.event.inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    # For pull_request events, only run once the "benchmark" label is present. Manual dispatch always runs.
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'benchmark') }}
+    runs-on: ubuntu-latest
+    container: node:24
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Resolve PR number
+      id: pr
+      run: echo "number=${{ github.event.pull_request.number || github.event.inputs.pr }}" >> "$GITHUB_OUTPUT"
+
+    - name: Checkout (full history)
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+        # For manual dispatch, check out the PR's merge ref so the harness and src match the PR.
+        ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/merge', github.event.inputs.pr) || '' }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: 24
+
+    - name: Trust workspace
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+    - name: Resolve base and head
+      id: refs
+      run: |
+        # The merge ref's two parents are the base (first) and the PR head (second). Using them keeps
+        # this working for both pull_request and workflow_dispatch without extra event plumbing.
+        echo "base=$(git rev-parse HEAD^1)" >> "$GITHUB_OUTPUT"
+        echo "head=$(git rev-parse HEAD^2)" >> "$GITHUB_OUTPUT"
+
+    - name: Install
+      run: npm install
+
+    # Baseline: run the PR's benchmark harness against the BASE branch's src. Only src/ is swapped, so
+    # the harness, config, and dependencies stay fixed and the comparison isolates the source change.
+    # The first pass is a throwaway warm-up: without it the base (which runs first) pays cold-database
+    # costs the PR run would not, biasing every delta positive. Each side warms itself so neither gets
+    # an unfair cold/warm advantage.
+    - name: Benchmark base
+      run: |
+        git checkout ${{ steps.refs.outputs.base }} -- src
+        npm run bench   # warm-up, discarded
+        npm run bench   # measured
+        npm run bench:baseline
+      env:
+        POSTGRES_HOST: postgres
+
+    # Candidate: restore the PR's src (the merge result) and benchmark it, same warm-up first.
+    - name: Benchmark PR
+      run: |
+        git checkout HEAD -- src
+        npm run bench   # warm-up, discarded
+        npm run bench   # measured
+      env:
+        POSTGRES_HOST: postgres
+
+    - name: Build report
+      run: node bench/report.mjs > report.md
+      env:
+        BENCH_LABEL: "PR #${{ steps.pr.outputs.number }} vs base"
+
+    - name: Post sticky comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs')
+          const marker = '<!-- pg-boss-benchmark -->'
+          const body = marker + '\n' + fs.readFileSync('report.md', 'utf8')
+          const issue_number = Number('${{ steps.pr.outputs.number }}')
+          const { owner, repo } = context.repo
+
+          const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number })
+          const existing = comments.find(c => c.body && c.body.includes(marker))
+
+          if (existing) {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+          } else {
+            await github.rest.issues.createComment({ owner, repo, issue_number, body })
+          }

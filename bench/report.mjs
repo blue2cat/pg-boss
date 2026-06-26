@@ -1,0 +1,139 @@
+#!/usr/bin/env node
+// Compares two vitest benchmark result files and prints a Markdown report suitable for posting on a
+// PR thread (e.g. `node bench/report.mjs > report.md && gh pr comment <#> --body-file report.md`).
+//
+// Usage:
+//   node bench/report.mjs [baselineJson] [currentJson] [--threshold=0.1] [--fail-on-regression]
+//
+// Defaults: bench/results/baseline.json and bench/results/latest.json.
+// Higher ops/s (hz) is better. A change is flagged significant only when it exceeds the threshold AND
+// the combined relative margin of error of both runs, so noise is not reported as a win or a loss.
+
+import { readFileSync, existsSync } from 'node:fs'
+
+const args = process.argv.slice(2)
+const flags = Object.fromEntries(
+  args.filter(a => a.startsWith('--')).map(a => {
+    const [k, v] = a.slice(2).split('=')
+    return [k, v ?? true]
+  })
+)
+const positional = args.filter(a => !a.startsWith('--'))
+
+const baselinePath = positional[0] ?? 'bench/results/baseline.json'
+const currentPath = positional[1] ?? 'bench/results/latest.json'
+const threshold = Number(flags.threshold ?? 0.1)
+const failOnRegression = Boolean(flags['fail-on-regression'])
+const label = flags.label ?? process.env.BENCH_LABEL ?? ''
+
+function load (path) {
+  if (!existsSync(path)) return null
+  const json = JSON.parse(readFileSync(path, 'utf8'))
+  const map = new Map()
+  for (const file of json.files ?? []) {
+    for (const group of file.groups ?? []) {
+      for (const b of group.benchmarks ?? []) {
+        map.set(`${group.fullName} › ${b.name}`, b)
+      }
+    }
+  }
+  return map
+}
+
+const current = load(currentPath)
+if (!current) {
+  console.error(`No current results at ${currentPath}. Run \`npm run bench\` first.`)
+  process.exit(2)
+}
+const baseline = load(baselinePath)
+
+const clean = s => s.replace(/^.*?\.bench\.ts > /, '')
+const fmt = n => n == null || !Number.isFinite(n) ? '—' : n >= 100 ? n.toFixed(0) : n.toFixed(1)
+const ms = n => n == null || !Number.isFinite(n) ? '—' : n.toFixed(3)
+const pct = n => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(1)}%`
+
+const rows = []
+const regressions = []
+const names = baseline ? new Set([...baseline.keys(), ...current.keys()]) : new Set(current.keys())
+
+for (const name of names) {
+  const cur = current.get(name)
+  const base = baseline?.get(name)
+
+  if (!cur) {
+    rows.push({ name, marker: '🗑️', base, cur, delta: null, note: 'removed' })
+    continue
+  }
+  if (!base) {
+    rows.push({ name, marker: baseline ? '🆕' : '', base: null, cur, delta: null })
+    continue
+  }
+
+  const delta = (cur.hz - base.hz) / base.hz
+  // Combined relative margin of error of the two runs (rme is a percent, e.g. 5.5 = ±5.5%).
+  const noise = ((base.rme ?? 0) + (cur.rme ?? 0)) / 100
+  // Single-sample benches (the destructive `maintain` sweep) have rme 0, so the margin-of-error gate
+  // would treat any wobble as significant. Show them as informational only — never a win or regression.
+  const lowSample = (base.sampleCount ?? 0) <= 1 || (cur.sampleCount ?? 0) <= 1
+  const significant = !lowSample && Math.abs(delta) >= threshold && Math.abs(delta) > noise
+
+  let marker = lowSample ? 'ℹ️' : '➖'
+  if (significant) marker = delta > 0 ? '🟢' : '🔴'
+  if (significant && delta <= -threshold) regressions.push({ name, delta })
+
+  rows.push({ name, marker, base, cur, delta })
+}
+
+rows.sort((a, b) => (a.delta ?? 0) - (b.delta ?? 0))
+
+const out = []
+out.push('## 📊 pg-boss benchmark')
+out.push('')
+if (baseline) {
+  out.push(`Comparing${label ? ` **${label}**` : ' the current run'} against baseline. Higher ops/s is better.`)
+} else {
+  out.push(`No baseline found at \`${baselinePath}\`, showing current numbers only.`)
+}
+out.push('')
+
+if (baseline) {
+  out.push('| Benchmark | Base ops/s | Current ops/s | Δ |  |')
+  out.push('|---|--:|--:|--:|:--:|')
+  for (const r of rows) {
+    const d = r.delta == null ? '—' : pct(r.delta)
+    out.push(`| ${clean(r.name)} | ${fmt(r.base?.hz)} | ${fmt(r.cur?.hz)} | ${d} | ${r.marker} |`)
+  }
+} else {
+  out.push('| Benchmark | ops/s | mean ms | p99 ms | samples |')
+  out.push('|---|--:|--:|--:|--:|')
+  for (const r of rows) {
+    out.push(`| ${clean(r.name)} | ${fmt(r.cur?.hz)} | ${ms(r.cur?.mean)} | ${ms(r.cur?.p99)} | ${r.cur?.sampleCount ?? '—'} |`)
+  }
+}
+out.push('')
+
+out.push('<details><summary>Latency detail (mean / p99 ms)</summary>')
+out.push('')
+out.push('| Benchmark | Base mean | Cur mean | Base p99 | Cur p99 | Samples |')
+out.push('|---|--:|--:|--:|--:|--:|')
+for (const r of rows) {
+  out.push(`| ${clean(r.name)} | ${ms(r.base?.mean)} | ${ms(r.cur?.mean)} | ${ms(r.base?.p99)} | ${ms(r.cur?.p99)} | ${r.cur?.sampleCount ?? '—'} |`)
+}
+out.push('')
+out.push('</details>')
+out.push('')
+
+if (baseline) {
+  if (regressions.length) {
+    out.push(`⚠️ **${regressions.length} regression${regressions.length > 1 ? 's' : ''}** beyond ${pct(threshold)}: ${regressions.map(r => `\`${clean(r.name)}\` (${pct(r.delta)})`).join(', ')}.`)
+  } else {
+    out.push(`✅ No regressions beyond ${pct(threshold)}.`)
+  }
+  out.push('')
+}
+
+out.push(`<sub>Δ flagged 🟢/🔴 only when it exceeds ${pct(threshold)} and both runs' margin of error. ℹ️ marks single-shot rows (one sample, e.g. \`maintain\`): informational only, never gated — treat their ops/s as 1 / sweep duration. Shared CI runners add real run-to-run noise, so read markers as directional. Generated by \`bench/report.mjs\` on Node ${process.version}.</sub>`)
+
+console.log(out.join('\n'))
+
+if (failOnRegression && regressions.length) process.exit(1)
