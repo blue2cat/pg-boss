@@ -70,19 +70,24 @@ jobs:
 
     # Baseline: run the PR's benchmark harness against the BASE branch's src. Only src/ is swapped, so
     # the harness, config, and dependencies stay fixed and the comparison isolates the source change.
+    # The first pass is a throwaway warm-up: without it the base (which runs first) pays cold-database
+    # costs the PR run would not, biasing every delta positive. Each side warms itself so neither gets
+    # an unfair cold/warm advantage.
     - name: Benchmark base
       run: |
         git checkout ${{ steps.refs.outputs.base }} -- src
-        npm run bench
+        npm run bench   # warm-up, discarded
+        npm run bench   # measured
         npm run bench:baseline
       env:
         POSTGRES_HOST: postgres
 
-    # Candidate: restore the PR's src (the merge result) and benchmark it.
+    # Candidate: restore the PR's src (the merge result) and benchmark it, same warm-up first.
     - name: Benchmark PR
       run: |
         git checkout HEAD -- src
-        npm run bench
+        npm run bench   # warm-up, discarded
+        npm run bench   # measured
       env:
         POSTGRES_HOST: postgres
 
