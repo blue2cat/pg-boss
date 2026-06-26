@@ -32,6 +32,20 @@ table with a per-row Δ, a regression summary, and a foldable latency detail. Hi
 | `scheduling.bench.ts` | `schedule` upsert, `getSchedules`, `getQueueStats`, one `maintain` sweep |
 | `policies.bench.ts` | `send` under each queue policy (standard / short / singleton / stately) |
 
+## CI: auto-post to a PR
+
+`.github/workflows/benchmark.yml` runs the comparison on GitHub and posts the report as a single
+sticky comment (created once, updated in place on later runs).
+
+- **Trigger:** add the `benchmark` label to a PR (or run the workflow manually with a PR number). It
+  is opt-in because benchmarks are slower and noisier than tests.
+- **How it compares:** it benchmarks the base branch and the PR on the same runner, swapping only
+  `src/` to the base commit for the baseline so the harness, config, and dependencies stay fixed and
+  the diff isolates the source change. This assumes the PR's bench files still import cleanly against
+  the base `src/` (true for ordinary perf PRs).
+- Shared CI runners have real variance, so treat the 🟢/🔴 markers as signal, not proof. The
+  margin-of-error gating keeps most noise at ➖.
+
 ## Database
 
 Benchmarks run against a real database via the test harness, so start one first:
