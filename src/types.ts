@@ -265,7 +265,7 @@ export interface QueueOptions {
    *
    * The function used to determine the backoff delay is:
    * ```js
-   * Math.min(retryDelayMax, retryDelay * (2 ** Math.Min(16, retryCount) / 2 + 2 Math.Min(16, retryCount) / 2 * Math.random()))
+   * Math.min(retryDelayMax, retryDelay * (2 ** Math.min(16, retryCount) / 2 + 2 ** Math.min(16, retryCount) / 2 * Math.random()))
    * ```
    * @default false
    */

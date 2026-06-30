@@ -69,7 +69,7 @@ The following options can be set as properties in an object for additional confi
 
 * **schedule**, bool, default true
 
-  If this is set to false, this instance will not monitor or created scheduled jobs during. This is an advanced use case you may want to do for testing or if the clock of the server is skewed and you would like to disable the skew warnings.
+  If this is set to false, this instance will not monitor or create scheduled jobs. This is an advanced use case you may want to do for testing or if the clock of the server is skewed and you would like to disable the skew warnings.
 
 * **migrate**, bool, default true
 
@@ -115,6 +115,10 @@ The following configuration options should not normally need to be changed, but 
 
   When `persistWarnings` is enabled, this option controls automatic cleanup of old warnings. Warnings older than the specified number of days will be deleted during maintenance. If not set, warnings are retained indefinitely. Maximum: 365 days.
 
+* **warningSlowQuerySeconds**, int
+
+  Slow query warning threshold, in seconds. When a maintenance query exceeds this duration, a `slow_query` warning event is emitted and persisted if `persistWarnings` is enabled. Minimum: 1.
+
 * **backend**, string, default `'postgres'`
 
   Selects the database pg-boss is running against and applies the compatibility behavior it needs. One of `'postgres'`, `'cockroachdb'`, `'yugabytedb'`, `'citus'`, or `'pglite'`.
@@ -125,3 +129,23 @@ The following configuration options should not normally need to be changed, but 
 
   Based on this setting, the fetch strategy, mutation strategy, schema shape, and numeric coercion may be changed. See [Database Backends](../database-backends.md#backend-profiles)
   for what each backend enables and the [compatibility matrix](../database-backends.md#database-compatibility).
+
+**Scheduling options**
+
+See [Scheduling](./scheduling.md) for more details on how these options affect scheduled jobs.
+
+* **clockMonitorIntervalSeconds**, int, default: 600
+
+  How often pg-boss checks the clock skew between the application server and the database. Large skew can cause scheduled jobs to fire early or late. Range: 1–600 seconds.
+
+* **cronMonitorIntervalSeconds**, int, default: 30
+
+  How often pg-boss scans scheduled jobs to determine if any are due for enqueueing. Range: 1–45 seconds.
+
+* **cronWorkerIntervalSeconds**, int, default: 5
+
+  How often the cron worker polls for newly enqueued scheduled jobs ready to process. Range: 1–45 seconds.
+
+* **bamIntervalSeconds**, int, default: 60
+
+  How often boss async migration (BAM) commands are evaluated and processed. Minimum: 10 seconds.

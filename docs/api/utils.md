@@ -9,11 +9,13 @@ The following static functions are not required during normal operations, but ar
 
 Returns the SQL commands required for manual creation of the required schema.
 
-### `getMigrationPlans(schema, version)`
+### `getMigrationPlans(schema, version, options)`
 
 **Arguments**
 - `schema`: string, database schema name
-- `version`: string, target schema version to migrate
+- `version`: number, target schema version to migrate
+- `options`: object, *optional*
+  - `partitionTables`: string[], names of existing per-queue partition tables that the migration should also apply to
 
 Returns the SQL commands required to manually migrate from the specified version to the latest version.
 
@@ -21,6 +23,6 @@ Returns the SQL commands required to manually migrate from the specified version
 
 **Arguments**
 - `schema`: string, database schema name
-- `version`: string, target schema version to uninstall
+- `version`: number, target schema version to uninstall
 
 Returns the SQL commands required to manually roll back the specified version to the previous version

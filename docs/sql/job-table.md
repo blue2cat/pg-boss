@@ -15,7 +15,9 @@ CREATE TABLE pgboss.job (
   retry_count integer not null default(0),
   retry_delay integer not null default(0),
   retry_backoff boolean not null default false,
-  retry_delay_max integer;
+  retry_delay_max integer,
+  group_id text,
+  group_tier text,
   expire_seconds integer not null default (900),
   deletion_seconds integer not null default (60 * 60 * 24 * 7),
   singleton_key text,

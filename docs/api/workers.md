@@ -67,6 +67,10 @@ The default options for `work()` is 1 job every 2 seconds.
 
   Same as in [`fetch()`](./jobs#fetchname-options)
 
+* **ignoreStartAfter**, bool, *(default=false)*
+
+  Same as in [`fetch()`](./jobs#fetchname-options)
+
 * **pollingIntervalSeconds**, int, *(default=2)*
 
   Base interval to check for new jobs, in seconds. Must be >=0.5 (500ms). Used when no faster or slower mode applies: queues without `notify`, or notify-enabled queues when the LISTEN/NOTIFY listener is unavailable.
@@ -91,7 +95,9 @@ The default options for `work()` is 1 job every 2 seconds.
 
   Number of workers to spawn for this queue within the current Node.js process. Each worker polls and processes jobs independently, enabling parallel job processing within a single `work()` call.
 
-  > **Note**: This is a per-node setting. In a distributed deployment with multiple nodes, each node manages its own workers independently. For example, if you have 3 nodes each calling `work()` with `localConcurrency: 5`, you'll have 15 total workers across your cluster.
+  > [!NOTE]
+  > This is a per-node setting. In a distributed deployment with multiple nodes, each node manages its own workers independently. For example, if you have 3 nodes each calling `work()` with `localConcurrency: 5`, you'll have 15 total workers across your cluster.
+
 
   ```js
   // Create 5 workers that can each process jobs in parallel
@@ -108,7 +114,8 @@ The default options for `work()` is 1 job every 2 seconds.
   - A simple number: `localGroupConcurrency: 2` - limits all groups to 2 concurrent jobs per node
   - An object with tier-based limits (see `groupConcurrency` below for format)
 
-  > **Note**: This is a per-node limit. In a distributed deployment, each node enforces its own limit independently. Use `groupConcurrency` instead if you need global coordination across nodes.
+  > [!NOTE]
+  > This is a per-node limit. In a distributed deployment, each node enforces its own limit independently. Use `groupConcurrency` instead if you need global coordination across nodes.
 
   ```js
   // Limit each tenant to 2 concurrent jobs on this node (no DB overhead)
@@ -156,7 +163,8 @@ The default options for `work()` is 1 job every 2 seconds.
 
   Jobs are assigned to groups using the `group` option in `send()`. Jobs without a group are not limited by groupConcurrency.
 
-  > **Note**: The `groupConcurrency` limit is enforced globally across all nodes by tracking active jobs in the database. However, due to the optimistic locking nature of job fetching, there may be brief moments where the limit is slightly exceeded during race conditions when multiple workers fetch jobs simultaneously.
+  > [!WARNING]
+  > The `groupConcurrency` limit is enforced globally across all nodes by tracking active jobs in the database. However, due to the optimistic locking nature of job fetching, there may be brief moments where the limit is slightly exceeded during race conditions when multiple workers fetch jobs simultaneously.
 
   ```js
   // Limit each tenant to 2 concurrent jobs globally across all nodes
@@ -209,6 +217,7 @@ In this setup:
 
 `handler` should return a promise (Usually this is an `async` function). If the `handler` returns a value or an object, it will be stored in the `output` property. If an unhandled error occurs in a handler, `fail()` will automatically be called for the jobs, storing the error in the `output` property, making the job or jobs available for retry.
 
+> [!TIP]
 > By default this is all-or-nothing across the batch. To complete and fail individual jobs within a batch — each with its own `output` — enable the **perJobResults** option above.
 
 The jobs argument is an array of jobs with the following properties.
@@ -218,8 +227,11 @@ The jobs argument is an array of jobs with the following properties.
 |`id`| string, uuid |
 |`name`| string |
 |`data`| object |
+|`expireInSeconds`| number | How many seconds the job may remain active before being retried or failed |
 |`heartbeatSeconds`| number \| null | Heartbeat interval configured for this job, or null if not configured |
 |`signal`| AbortSignal |
+|`groupId`| string \| null | Group identifier assigned via `send()`, or null |
+|`groupTier`| string \| null | Group tier assigned via `send()`, or null |
 
 
 An example of a worker that checks for a job every 10 seconds.

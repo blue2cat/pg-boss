@@ -12,9 +12,11 @@ If the CREATE privilege is not available or desired, you have two options:
 
 2. **Static functions** - Use the included [utility functions](./api/utils) to export the SQL commands programmatically.
 
-**Note:** When managing schema manually, you will need to monitor future releases for schema changes.
+> [!NOTE]
+> When managing schema manually, you will need to monitor future releases for schema changes.
 
-NOTE: Using an existing schema is supported for advanced use cases **but discouraged**, as this opens up the possibility that creation will fail on an object name collision, and it will add more steps to the uninstallation process.
+> [!WARNING]
+> Using an existing schema is supported for advanced use cases **but discouraged**, as this opens up the possibility that creation will fail on an object name collision, and it will add more steps to the uninstallation process.
 
 # Database uninstall
 
@@ -26,15 +28,25 @@ DROP SCHEMA $1 CASCADE
 
 Where `$1` is the name of your schema if you've customized it.  Otherwise, the default schema is `pgboss`.
 
-NOTE: If an existing schema was used during installation, created objects will need to be removed manually using the following commands.
+> [!NOTE]
+> If an existing schema was used during installation, created objects will need to be removed manually using the following commands.
 
 ```sql
 DROP TABLE pgboss.version;
-DROP TABLE pgboss.job;
+DROP TABLE pgboss.job_dependency CASCADE;
+DROP TABLE pgboss.job CASCADE;
 DROP TYPE pgboss.job_state;
 DROP TABLE pgboss.subscription;
 DROP TABLE pgboss.schedule;
+DROP TABLE pgboss.warning;
+DROP TABLE pgboss.bam;
 DROP FUNCTION pgboss.create_queue;
 DROP FUNCTION pgboss.delete_queue;
+DROP FUNCTION pgboss.job_table_format;
+DROP FUNCTION pgboss.job_table_run;
+DROP FUNCTION pgboss.job_table_run_async;
 DROP TABLE pgboss.queue;
 ```
+
+> [!NOTE]
+> The `job` table is partitioned: the `job_common` default partition and any per-queue partition tables (created for queues with `partition: true`) are attached to it, so `DROP TABLE pgboss.job CASCADE` removes them along with the parent.
